@@ -25,18 +25,16 @@ struct TodoItem {
     description: String,
 }
 
+enum FormAction {
+    None,
+    Submit,
+    Escape,
+}
+
 fn main() -> Result<()> {
     let mut state = AppState::default();
     state.is_add_new = false;
     color_eyre::install()?;
-    state.items.push(TodoItem {
-        is_done: true,
-        description: "Hello".to_string(),
-    });
-    state.items.push(TodoItem {
-        is_done: false,
-        description: "jediowajer".to_string(),
-    });
     let terminal = ratatui::init();
     let result = run(terminal, &mut state);
     ratatui::restore();
@@ -48,8 +46,20 @@ fn run(mut terminal: DefaultTerminal, app_state: &mut AppState) -> Result<()> {
         terminal.draw(|f| render(f, app_state))?;
         if let Event::Key(key) = event::read()? {
             if app_state.is_add_new {
-                if handle_add_new(key, app_state) {
-                    app_state.is_add_new = false;
+                match handle_add_new(key, app_state) {
+                    FormAction::None => {}
+                    FormAction::Submit => {
+                        app_state.items.push(TodoItem {
+                            is_done: false,
+                            description: app_state.input_value.clone(),
+                        });
+                        app_state.is_add_new = false;
+                        app_state.input_value.clear();
+                    }
+                    FormAction::Escape => {
+                        app_state.is_add_new = false;
+                        app_state.input_value.clear();
+                    }
                 }
             } else {
                 if handle_key(key, app_state) {
@@ -60,7 +70,7 @@ fn run(mut terminal: DefaultTerminal, app_state: &mut AppState) -> Result<()> {
     }
     Ok(())
 }
-fn handle_add_new(key: KeyEvent, app_state: &mut AppState) -> bool {
+fn handle_add_new(key: KeyEvent, app_state: &mut AppState) -> FormAction {
     match key.code {
         event::KeyCode::Char(c) => {
             app_state.input_value.push(c);
@@ -69,14 +79,14 @@ fn handle_add_new(key: KeyEvent, app_state: &mut AppState) -> bool {
             app_state.input_value.pop();
         }
         event::KeyCode::Esc => {
-            return true;
+            return FormAction::Escape;
         }
         event::KeyCode::Enter => {
-            return true;
+            return FormAction::Submit;
         }
         _ => {}
     }
-    false
+    FormAction::None
 }
 fn handle_key(key: KeyEvent, app_state: &mut AppState) -> bool {
     match key.code {
@@ -105,25 +115,6 @@ fn handle_key(key: KeyEvent, app_state: &mut AppState) -> bool {
     false
 }
 fn render(frame: &mut Frame, app_state: &mut AppState) {
-    let [border_area] = Layout::vertical([Constraint::Fill(1)])
-        .margin(1)
-        .areas(frame.area());
-    let [inner_area] = Layout::vertical([Constraint::Fill(1)])
-        .margin(1)
-        .areas(border_area);
-    Block::bordered()
-        .border_type(ratatui::widgets::BorderType::Rounded)
-        .fg(Color::Yellow)
-        .render(border_area, frame.buffer_mut());
-    let list = List::new(
-        app_state
-            .items
-            .iter()
-            .map(|x| ListItem::from(x.description.as_str())),
-    )
-    .highlight_symbol(">")
-    .highlight_style(RStyle::default().fg(Color::Green));
-    frame.render_stateful_widget(list, inner_area, &mut app_state.list_state);
     if app_state.is_add_new {
         Paragraph::new(app_state.input_value.as_str())
             .block(
@@ -132,6 +123,26 @@ fn render(frame: &mut Frame, app_state: &mut AppState) {
                     .padding(Padding::uniform(1))
                     .border_type(BorderType::Rounded),
             )
-            .render(inner_area, frame.buffer_mut());
+            .render(frame.area(), frame.buffer_mut());
+    } else {
+        let [border_area] = Layout::vertical([Constraint::Fill(1)])
+            .margin(1)
+            .areas(frame.area());
+        let [inner_area] = Layout::vertical([Constraint::Fill(1)])
+            .margin(1)
+            .areas(border_area);
+        Block::bordered()
+            .border_type(ratatui::widgets::BorderType::Rounded)
+            .fg(Color::Yellow)
+            .render(border_area, frame.buffer_mut());
+        let list = List::new(
+            app_state
+                .items
+                .iter()
+                .map(|x| ListItem::from(x.description.as_str())),
+        )
+        .highlight_symbol(">")
+        .highlight_style(RStyle::default().fg(Color::Green));
+        frame.render_stateful_widget(list, inner_area, &mut app_state.list_state);
     }
 }
